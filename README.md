@@ -1,6 +1,8 @@
 Virtual Research Environment
 ============================
 
+This virtual research environment (VRE) provides a cloud-based system to support research.  It is built using the Google App Engine platform as a service (PaaS) and Amazon Web Services infrastructure as a service (IaaS).
+
 ## Set up Development Environment
 
 To configure Amazon Web Services (AWS), specify your AWS Access Key ID and AWS Secret Access Key in the file
