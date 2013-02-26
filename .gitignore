@@ -34,5 +34,6 @@ nosetests.xml
 .project
 .pydevproject
 
-# Mac OS
 .DS_Store
+
+settings.py
