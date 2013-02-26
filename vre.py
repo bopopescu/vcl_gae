@@ -28,9 +28,11 @@ boto.config.set('Boto', 'https_validate_certificates', 'False')
 
 # Based on example at [https://gist.github.com/thurloat/425480].
 config = boto.config
-config.add_section('Credentials')
-config.set('Credentials', 'aws_access_key_id', '')
-config.set('Credentials', 'aws_secret_access_key', '')
+#config.add_section('Credentials')
+#config.set('Credentials', 'aws_access_key_id', '')
+#config.set('Credentials', 'aws_secret_access_key', '')
+from settings import init_boto
+init_boto(config)
 
 # Virtual computer lab model
 class computerlab(db.Model):
