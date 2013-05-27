@@ -274,6 +274,15 @@ def terminate_instance(iid):
         time.sleep(5)
         instance.update()
 
+def get_user_data(user):
+    userData = UserData().all().filter('user =', user).get()
+    if userData == None:
+        userData = UserData()
+        userData.user = user
+        userData.aws_username = user.nickname() # Default to nickname.  This can be changed in the Administration Console.
+        userData.save()
+    return userData
+
 class MainPage(webapp2.RequestHandler):
     
     def get(self):
@@ -283,16 +292,11 @@ class MainPage(webapp2.RequestHandler):
         if user == None:
             self.redirect(users.create_login_url(self.request.uri))
         else:
-            
             # Check if UserData exists for current user.  If not, create one for the user.
-            userData = UserData().all().filter('user =', user).get()
-            if userData == None:
-                userData = UserData()
-                userData.user = user
-                userData.aws_username = user.nickname() # Default to nickname.  This can be changed in the Administration Console.
-                userData.save(); 
+            userData = get_user_data(user)
         
             # Initialize database
+            # Note: This code should be removed in production.
             if ComputerLab().all().count() <= 0:
                 c = ComputerLab()
                 c.labname = "Organization of Information"
@@ -311,22 +315,22 @@ class MainPage(webapp2.RequestHandler):
             
             # Check if the user submitted an action
             action = 'Do Nothing'
-    #        if self.request.get("action") != '':
-    #            action = self.request.get("action")
-    #            if action == 'Start Server':
-    #                result = start_instance(iid)
-    #            if action == 'Stop Server':
-    #                result = stop_instance(iid)
-    #            if action == 'Create Server':
-    #                iitype = self.request.get('instance_type')
-    #                iid = self.request.get('iid')
-    #                coursecode = self.request.get('coursecode')
-    #                result = create_instance(username=user.nickname(), ami=iid, instance_type=iitype, classcode=coursecode)
-    #            if action == 'Terminate Server':
-    #                result = terminate_instance(iid)
-    #            if action == 'Download Connection File':
-    #                public_dns = request.POST['public_dns']
-    #                result = create_rdp_file(public_dns)
+#             if self.request.get("action") != '':
+#                 action = self.request.get("action")
+#                 if action == 'Start Server':
+#                     result = start_instance(iid)
+#                 if action == 'Stop Server':
+#                     result = stop_instance(iid)
+#                 if action == 'Create Server':
+#                     iitype = self.request.get('instance_type')
+#                     iid = self.request.get('iid')
+#                     coursecode = self.request.get('coursecode')
+#                     result = create_instance(username=user.nickname(), ami=iid, instance_type=iitype, classcode=coursecode)
+#                 if action == 'Terminate Server':
+#                     result = terminate_instance(iid)
+#                 if action == 'Download Connection File':
+#                     public_dns = request.POST['public_dns']
+#                     result = create_rdp_file(public_dns)
     
             #list_of_machines = list_instances(username=user.nickname())
             list_of_machines = list_instances(username=userData.aws_username)
@@ -355,15 +359,7 @@ class MainPage(webapp2.RequestHandler):
             self.redirect(users.create_login_url(self.request.uri))
         else:
             # Check if UserData exists for current user.  If not, create one for the user.
-            userData = UserData().all().filter('user =', user).get()
-            if userData == None:
-                userData = UserData()
-                userData.user = user
-                userData.aws_username = user.nickname() # Default to nickname.  This can be changed in the Administration Console.
-                userData.save();
-        
-#        self.response.headers['Content-Type'] = 'text/plain'
-#        self.response.out.write('Hello, webapp World!')
+            userData = get_user_data(user)
 
         # Check if user submitted the "iid" parameter, which is an virtual 
         # machine instance ID to supply to AWS EC2.
