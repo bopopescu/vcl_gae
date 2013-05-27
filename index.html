@@ -2,7 +2,7 @@
 {% block sidebar %}
 <div id="sidebar">
 <h1>Lab machine management</h1>
-<p>Hi {{ myuser.first_name }}  Here are your machines.</p>
+<p>Hi {{ user.nickname }}  Here are your machines.</p>
 <p> You just asked me to: {{ action }}</p>
 <h2>Instructions</h2>
 <dl>
@@ -66,7 +66,7 @@
 	{% for lab in list_of_labs %}
 	<form action="./" method="post">
 		<input type="hidden" name="iid" value="{{ lab.amazonami }}" />
-		<input type="hidden" name="username" value="{{ myuser.username }}" />
+		<input type="hidden" name="username" value="{{ user.nickname }}" />
 		<input type="hidden" name="coursecode" value="{{ lab.coursecode }}" />
 		<ul>
 		<li><b>Class:</b>{{ lab.coursename }} </li>

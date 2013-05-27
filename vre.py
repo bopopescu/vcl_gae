@@ -2,19 +2,21 @@ import os
 import datetime
 import time
 
+import webapp2
+
 # Google App Engine Python SDK includes Django 1.4 and 0.96, but 0.96 is 
 # imported by default when import the django package.  The code below sets 
 # configures the SDK to import Django version 1.4
 # [https://developers.google.com/appengine/docs/python/tools/libraries27] 
-os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
-from google.appengine.dist import use_library
-use_library('django', '1.3')
+# os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
+# from google.appengine.dist import use_library
+# use_library('django', '1.3')
 
-from google.appengine.ext import webapp
-from google.appengine.ext.webapp import template
-from google.appengine.ext.webapp.util import run_wsgi_app
-from google.appengine.ext import db
 from google.appengine.api import users
+# from google.appengine.ext import webapp
+from google.appengine.ext.webapp import template
+# from google.appengine.ext.webapp.util import run_wsgi_app
+from google.appengine.ext import db
 
 import boto
 #import boto.manage.cmdshell # This does not work in GAE.
@@ -28,9 +30,6 @@ boto.config.set('Boto', 'https_validate_certificates', 'False')
 
 # Based on example at [https://gist.github.com/thurloat/425480].
 config = boto.config
-#config.add_section('Credentials')
-#config.set('Credentials', 'aws_access_key_id', '')
-#config.set('Credentials', 'aws_secret_access_key', '')
 from settings import init_boto
 init_boto(config)
 
@@ -215,32 +214,32 @@ def list_instances(ami='ami-',
                    username = '',
                    classcode='',
                    azone = 'us-east-1c'):         
-        ec2 = boto.connect_ec2()
-        reservations = ec2.get_all_instances(filters={'tag-value': username})
-        machines = {}
-        for reservation in reservations:
-            instance = reservation.instances[0]
-            instance_tags = instance.tags
-            if instance_tags[u'Name']:    
-                instance_name = instance_tags[u'Name']    
-            else:
-                instance_name = "Lab machine"
-            if instance.state != 'terminated':
-                tmpinstance = instance.image_id
-                #comp_lab_info = {'lab_auth_info':'Sorry, I could not find any authentication information', 'lab_connection_options':'Sorry, I could not find connection options!'}
-                try:
-                    comp_lab_info = computerlab.objects.get(amazonami=tmpinstance)
-                    lab_auth_info = comp_lab_info.lab_auth_info
-                    connect_info = comp_lab_info.lab_connection_options  
-                    coursecode = comp_lab_info.coursecode
-                except Exception:
-                    comp_lab_info = {'lab_auth_info':'simple', 'lab_connection_options':'test2'}
-                    lab_auth_info = comp_lab_info['lab_auth_info']
-                    coursecode = 'none'
-                    connect_info = comp_lab_info['lab_connection_options']
-                machines[instance.id] = {'instance_name': instance_name,'coursecode': coursecode, 'instance_type': instance.instance_type, 'lab_auth_info': lab_auth_info, 'instance_id': instance.id, 'connect_info': connect_info ,'instance_state': instance.state, 'ami_id': instance.image_id, 'public_dns': instance.public_dns_name}
-
-        return machines
+    ec2 = boto.connect_ec2()
+    reservations = ec2.get_all_instances(filters={'tag-value': username})
+    machines = {}
+    for reservation in reservations:
+        instance = reservation.instances[0]
+        instance_tags = instance.tags
+        if instance_tags[u'Name']:    
+            instance_name = instance_tags[u'Name']    
+        else:
+            instance_name = "Lab machine"
+        if instance.state != 'terminated':
+            tmpinstance = instance.image_id
+            #comp_lab_info = {'lab_auth_info':'Sorry, I could not find any authentication information', 'lab_connection_options':'Sorry, I could not find connection options!'}
+            try:
+                comp_lab_info = computerlab.objects.get(amazonami=tmpinstance)
+                lab_auth_info = comp_lab_info.lab_auth_info
+                connect_info = comp_lab_info.lab_connection_options  
+                coursecode = comp_lab_info.coursecode
+            except Exception:
+                comp_lab_info = {'lab_auth_info':'simple', 'lab_connection_options':'test2'}
+                lab_auth_info = comp_lab_info['lab_auth_info']
+                coursecode = 'none'
+                connect_info = comp_lab_info['lab_connection_options']
+            machines[instance.id] = {'instance_name': instance_name,'coursecode': coursecode, 'instance_type': instance.instance_type, 'lab_auth_info': lab_auth_info, 'instance_id': instance.id, 'connect_info': connect_info ,'instance_state': instance.state, 'ami_id': instance.image_id, 'public_dns': instance.public_dns_name}
+    
+    return machines
 
 def start_instance(iid):         
     ec2 = boto.connect_ec2()
@@ -275,50 +274,70 @@ def terminate_instance(iid):
         time.sleep(5)
         instance.update()
 
-class MainPage(webapp.RequestHandler):
+class MainPage(webapp2.RequestHandler):
     
     def get(self):
+    
         # Require authentication.
         user = users.get_current_user()
-        if not user:
+        if user == None:
             self.redirect(users.create_login_url(self.request.uri))
+        else:
         
-        # Check if the user submitted an action
-        action = 'Do Nothing'
-#        if self.request.get("action") != '':
-#            action = self.request.get("action")
-#            if action == 'Start Server':
-#                result = start_instance(iid)
-#            if action == 'Stop Server':
-#                result = stop_instance(iid)
-#            if action == 'Create Server':
-#                iitype = self.request.get('instance_type')
-#                iid = self.request.get('iid')
-#                coursecode = self.request.get('coursecode')
-#                result = create_instance(username=user.nickname(), ami=iid, instance_type=iitype, classcode=coursecode)
-#            if action == 'Terminate Server':
-#                result = terminate_instance(iid)
-#            if action == 'Download Connection File':
-#                public_dns = request.POST['public_dns']
-#                result = create_rdp_file(public_dns)
-        list_of_machines = list_instances(username = user.nickname())
-        list_of_labs = computerlab.all()
-        
-        # Construct dictionary of template variables.
-        template_values = {
-            'user': user,
-            'login_url': users.create_login_url(self.request.uri),
-            'logout_url': users.create_logout_url(self.request.uri),
+            # Initialize database
+            if computerlab().all().count() <= 0:
+                c = computerlab()
+                c.labname = "Organization of Information"
+                c.labdescription = "Computer lab for LBSC 670"
+                c.coursename = "Organization of Information"
+                c.coursecode = "LBSC670_Fall2012"
+                c.coursesemester = ""
+                c.courseinstructor = "Erik Mitchell"
+                c.amazonami = "ami-2d3b8d44"
+                c.date_created = datetime.datetime.now()
+                c.lab_auth_info = "Username = lbsc670, password = metadata"
+                c.lab_connection_options = ""
+                c.group_name = ""
+                c.instance_type = "m1.small"
+                c.save()
             
-            'list_of_machines': list_of_machines,
-            'action': action,
-            'list_of_labs': list_of_labs
-        }
-        
-        # Render and write response to HTTP request.
-        path = os.path.join(os.path.dirname(__file__), "./index.html") # Get path of index.html file
-        rendered_text = template.render(path, template_values) # Render text for template
-        self.response.out.write(rendered_text) # Send response containing index.html contents
+            # Check if the user submitted an action
+            action = 'Do Nothing'
+    #        if self.request.get("action") != '':
+    #            action = self.request.get("action")
+    #            if action == 'Start Server':
+    #                result = start_instance(iid)
+    #            if action == 'Stop Server':
+    #                result = stop_instance(iid)
+    #            if action == 'Create Server':
+    #                iitype = self.request.get('instance_type')
+    #                iid = self.request.get('iid')
+    #                coursecode = self.request.get('coursecode')
+    #                result = create_instance(username=user.nickname(), ami=iid, instance_type=iitype, classcode=coursecode)
+    #            if action == 'Terminate Server':
+    #                result = terminate_instance(iid)
+    #            if action == 'Download Connection File':
+    #                public_dns = request.POST['public_dns']
+    #                result = create_rdp_file(public_dns)
+            #list_of_machines = list_instances(username=user.nickname())
+            list_of_machines = list_instances(username='mgubbels')
+            list_of_labs = computerlab.all()
+            
+            # Construct dictionary of template variables.
+            template_values = {
+                'user': user,
+                'login_url': users.create_login_url(self.request.uri),
+                'logout_url': users.create_logout_url(self.request.uri),
+                
+                'list_of_machines': list_of_machines,
+                'action': action,
+                'list_of_labs': list_of_labs
+            }
+            
+            # Render and write response to HTTP request.
+            path = os.path.join(os.path.dirname(__file__), "./index_bs.html")  # Get path of index.html file
+            rendered_text = template.render(path, template_values)  # Render text for template
+            self.response.out.write(rendered_text)  # Send response containing index.html contents
     
     def post(self):
         # Require authentication.
@@ -354,7 +373,8 @@ class MainPage(webapp.RequestHandler):
                 result = create_rdp_file(public_dns)
 
         # List virtual machines (VMs) and labs (VCLs) in environment (VRE)
-        list_of_machines = list_instances(username=user.nickname())
+        #list_of_machines = list_instances(username=user.nickname())
+        list_of_machines = list_instances(username='mgubbels')
         list_of_labs = computerlab.all()
         
         template_values = {
@@ -373,7 +393,7 @@ class MainPage(webapp.RequestHandler):
         self.response.out.write(rendered_text) # Send response containing index.html contents
 
 # e.g., ec2-50-17-78-170.compute-1.amazonaws.com
-class create_rdp_file(webapp.RequestHandler):
+class create_rdp_file(webapp2.RequestHandler):
     
     def get(self):
         # Require authentication.
@@ -423,14 +443,14 @@ full address:s:%s
         self.response.headers['Content-Disposition'] = 'attachment; filename=connect.rdp'
         self.response.out.write(tmpfile)
 
-application = webapp.WSGIApplication([
+app = webapp2.WSGIApplication([
         ('/', MainPage),
         ('/downloadrdp', create_rdp_file)
     ], debug=True)
 
 
-def main():
-    run_wsgi_app(application)
-
-if __name__ == "__main__":
-    main()
+# def main():
+#     run_wsgi_app(application)
+# 
+# if __name__ == "__main__":
+#     main()
