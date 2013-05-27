@@ -13,4 +13,4 @@ handlers:
   static_dir: assets
   
 - url: /.*
-  script: vre.app
+  script: main.app
