@@ -2,24 +2,15 @@ import os
 import datetime
 import time
 
+# Google App Engine
 import webapp2
-
-# Google App Engine Python SDK includes Django 1.4 and 0.96, but 0.96 is 
-# imported by default when import the django package.  The code below sets 
-# configures the SDK to import Django version 1.4
-# [https://developers.google.com/appengine/docs/python/tools/libraries27] 
-# os.environ['DJANGO_SETTINGS_MODULE'] = 'settings'
-# from google.appengine.dist import use_library
-# use_library('django', '1.3')
-
 from google.appengine.api import users
-# from google.appengine.ext import webapp
 from google.appengine.ext.webapp import template
-# from google.appengine.ext.webapp.util import run_wsgi_app
 from google.appengine.ext import db
 
+# Amazon Web Services EC2
+# Note: The boto library is used to interact with the AWS EC2 services
 import boto
-#import boto.manage.cmdshell # This does not work in GAE.
 import boto.manage.server
 
 # To prevent error:
@@ -33,8 +24,8 @@ config = boto.config
 from settings import init_boto
 init_boto(config)
 
-# Virtual computer lab model
-class computerlab(db.Model):
+# Data model for the virtual computer lab.
+class ComputerLab(db.Model):
     labname = db.StringProperty()
     labdescription = db.StringProperty()
     coursename = db.StringProperty()
@@ -47,6 +38,10 @@ class computerlab(db.Model):
     lab_connection_options = db.StringProperty()    
     group_name = db.StringProperty()
     instance_type = db.StringProperty()
+
+class UserData(db.Model):
+    user = db.UserProperty()
+    aws_username = db.StringProperty()
 
 def create_instance(ami='ami-456ac22c',
                     instance_type='t1.micro',
@@ -124,12 +119,18 @@ apt-get install --force-yes freenx-server
     # If we get an InvalidKeyPair.NotFound error back from EC2,
     # it means that it doesn't exist and we need to create it.
     try:
-        key = ec2.get_all_key_pairs(keynames=[key_name])[0]
+        key = None
+        if len(key_name) > 0: 
+            key = ec2.get_all_key_pairs(keynames=[key_name])[0]
+        else:
+            key = ec2.get_all_key_pairs()[0]
     except ec2.ResponseError, e:
+        print e
         if e.code == 'InvalidKeyPair.NotFound':
             print 'Creating keypair: %s' % key_name
             # Create an SSH key to use when logging into instances.
             key = ec2.create_key_pair(key_name)
+            print 'new key: ' + key
             
             # AWS will store the public key but the private key is
             # generated and returned and needs to be stored locally.
@@ -148,8 +149,7 @@ apt-get install --force-yes freenx-server
         if e.code == 'InvalidGroup.NotFound':
             print 'Creating Security Group: %s' % group_name
             # Create a security group to control access to instance via SSH.
-            group = ec2.create_security_group(group_name,
-                                              'A group that allows SSH access')
+            group = ec2.create_security_group(group_name, 'A group that allows SSH access')
         else:
             raise
 
@@ -228,7 +228,7 @@ def list_instances(ami='ami-',
             tmpinstance = instance.image_id
             #comp_lab_info = {'lab_auth_info':'Sorry, I could not find any authentication information', 'lab_connection_options':'Sorry, I could not find connection options!'}
             try:
-                comp_lab_info = computerlab.objects.get(amazonami=tmpinstance)
+                comp_lab_info = ComputerLab.objects.get(amazonami=tmpinstance)
                 lab_auth_info = comp_lab_info.lab_auth_info
                 connect_info = comp_lab_info.lab_connection_options  
                 coursecode = comp_lab_info.coursecode
@@ -283,10 +283,18 @@ class MainPage(webapp2.RequestHandler):
         if user == None:
             self.redirect(users.create_login_url(self.request.uri))
         else:
+            
+            # Check if UserData exists for current user.  If not, create one for the user.
+            userData = UserData().all().filter('user =', user).get()
+            if userData == None:
+                userData = UserData()
+                userData.user = user
+                userData.aws_username = user.nickname() # Default to nickname.  This can be changed in the Administration Console.
+                userData.save(); 
         
             # Initialize database
-            if computerlab().all().count() <= 0:
-                c = computerlab()
+            if ComputerLab().all().count() <= 0:
+                c = ComputerLab()
                 c.labname = "Organization of Information"
                 c.labdescription = "Computer lab for LBSC 670"
                 c.coursename = "Organization of Information"
@@ -319,9 +327,10 @@ class MainPage(webapp2.RequestHandler):
     #            if action == 'Download Connection File':
     #                public_dns = request.POST['public_dns']
     #                result = create_rdp_file(public_dns)
+    
             #list_of_machines = list_instances(username=user.nickname())
-            list_of_machines = list_instances(username='mgubbels')
-            list_of_labs = computerlab.all()
+            list_of_machines = list_instances(username=userData.aws_username)
+            list_of_labs = ComputerLab.all()
             
             # Construct dictionary of template variables.
             template_values = {
@@ -335,7 +344,7 @@ class MainPage(webapp2.RequestHandler):
             }
             
             # Render and write response to HTTP request.
-            path = os.path.join(os.path.dirname(__file__), "./index_bs.html")  # Get path of index.html file
+            path = os.path.join(os.path.dirname(__file__), "./index.html")  # Get path of index.html file
             rendered_text = template.render(path, template_values)  # Render text for template
             self.response.out.write(rendered_text)  # Send response containing index.html contents
     
@@ -344,11 +353,20 @@ class MainPage(webapp2.RequestHandler):
         user = users.get_current_user()
         if not user:
             self.redirect(users.create_login_url(self.request.uri))
+        else:
+            # Check if UserData exists for current user.  If not, create one for the user.
+            userData = UserData().all().filter('user =', user).get()
+            if userData == None:
+                userData = UserData()
+                userData.user = user
+                userData.aws_username = user.nickname() # Default to nickname.  This can be changed in the Administration Console.
+                userData.save();
         
 #        self.response.headers['Content-Type'] = 'text/plain'
 #        self.response.out.write('Hello, webapp World!')
 
-        # Check if user submitted an "iid", a VM instance ID.
+        # Check if user submitted the "iid" parameter, which is an virtual 
+        # machine instance ID to supply to AWS EC2.
         iid = self.request.get("iid", "")
         
         # Check if the user submitted an action
@@ -365,7 +383,7 @@ class MainPage(webapp2.RequestHandler):
                 iitype = self.request.get('instance_type')
                 iid = self.request.get('iid')
                 coursecode = self.request.get('coursecode')
-                result = create_instance(username=user.nickname(), ami=iid, instance_type=iitype, classcode=coursecode)
+                result = create_instance(username=userData.aws_username, ami=iid, instance_type=iitype, classcode=coursecode)
             if action == 'Terminate Server':
                 result = terminate_instance(iid)
             if action == 'Download Connection File':
@@ -374,8 +392,8 @@ class MainPage(webapp2.RequestHandler):
 
         # List virtual machines (VMs) and labs (VCLs) in environment (VRE)
         #list_of_machines = list_instances(username=user.nickname())
-        list_of_machines = list_instances(username='mgubbels')
-        list_of_labs = computerlab.all()
+        list_of_machines = list_instances(username=userData.aws_username)
+        list_of_labs = ComputerLab.all()
         
         template_values = {
             'user': user,
